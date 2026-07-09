@@ -1,0 +1,43 @@
+/**
+ * Dotwisp — minimal styles
+ * Vignette background via CSS, canvas transparent overlay
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background: #1c1c1c;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  user-select: none;
+}
+
+body {
+  /* Radial vignette background */
+  background: radial-gradient(ellipse at center, #2b2b2b 0%, #161616 100%);
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+#game canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}

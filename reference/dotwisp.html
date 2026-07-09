@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Dotwisp</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #1c1c1c;
+    font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+  #wrap { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    color: #d8d8d8; padding: 0 32px; transition: opacity .35s ease;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .title { font-size: 15vw; font-weight: 200; color: #eef4f4; line-height: 1; text-shadow: 0 0 34px rgba(120,224,224,.45); }
+  .sub { margin-top: 22px; font-size: 15px; color: #8a8a8a; line-height: 1.6; max-width: 320px; }
+  .prompt { margin-top: 40px; font-size: 13px; letter-spacing: .28em; text-transform: uppercase; color: #6fd6d6; animation: pulse 1.9s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  .go-score { font-size: 13vw; font-weight: 200; color: #eef4f4; line-height: 1; }
+  .go-label { margin-top: 14px; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: #7a7a7a; }
+  .go-best  { margin-top: 8px; font-size: 13px; color: #6fd6d6; letter-spacing: .05em; }
+  .go-motes { margin-top: 6px; font-size: 13px; color: #9adcdc; letter-spacing: .05em; }
+
+  #score {
+    position: absolute; top: 0; left: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) 0 0 calc(env(safe-area-inset-left, 0px) + 22px);
+    font-size: 30px; font-weight: 200; color: #cfe9e9; letter-spacing: .06em;
+    text-shadow: 0 0 18px rgba(120,224,224,.3); opacity: 0; transition: opacity .3s ease;
+    font-variant-numeric: tabular-nums;
+  }
+  #score.on { opacity: 1; }
+
+  #hud {
+    position: absolute; top: 0; right: 0;
+    display: flex; align-items: center; justify-content: flex-end; gap: 9px;
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) calc(env(safe-area-inset-right, 0px) + 22px) 0 0;
+    font-size: 30px; font-weight: 200; color: #cfe9e9; letter-spacing: .06em;
+    text-shadow: 0 0 18px rgba(120,224,224,.3);
+    opacity: 0; transition: opacity .3s ease, transform .12s ease;
+    transform-origin: 100% 0; font-variant-numeric: tabular-nums;
+  }
+  #hud::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #7fe4e4; box-shadow: 0 0 10px rgba(127,228,228,.85); }
+  #hud.on { opacity: 1; }
+
+  #zonebar {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    padding: calc(env(safe-area-inset-top, 0px) + 26px) 0 0 0;
+    font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: #5f6f6f;
+    opacity: 0; transition: opacity .3s ease; pointer-events: none; white-space: nowrap;
+  }
+  #zonebar.on { opacity: 1; }
+
+  #zone {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    pointer-events: none; opacity: 0; transition: opacity .5s ease;
+  }
+  #zone.on { opacity: 1; }
+  #zone .zbig { font-size: 9vw; font-weight: 200; color: #eef7f7; letter-spacing: .05em; text-shadow: 0 0 30px rgba(120,224,224,.4); }
+  #zone .zname { margin-top: 10px; font-size: 15px; letter-spacing: .3em; text-transform: uppercase; color: #6fd6d6; }
+  #zone .zstars { margin-top: 18px; font-size: 22px; color: #7fe4e4; letter-spacing: .18em; min-height: 26px; }
+  #zone .zreward { margin-top: 14px; font-size: 14px; color: #9adcdc; letter-spacing: .05em; }
+
+  @media (prefers-reduced-motion: reduce) { .prompt { animation: none; opacity: .8; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="score">0</div>
+  <div id="hud">0</div>
+  <div id="zonebar"></div>
+  <div id="zone">
+    <div class="zbig" id="zBig"></div>
+    <div class="zname" id="zName"></div>
+    <div class="zstars" id="zStars"></div>
+    <div class="zreward" id="zReward"></div>
+  </div>
+  <div id="start" class="overlay">
+    <div class="title">&bull;</div>
+    <div class="sub">Tap anywhere to flap. Weave through the gaps, gather glowing rings for points, and clear each zone to advance &mdash; the challenge shifts as you go.</div>
+    <div class="prompt">Tap to begin</div>
+  </div>
+  <div id="over" class="overlay hidden">
+    <div id="goScore" class="go-score">0</div>
+    <div class="go-label">Cleared</div>
+    <div id="goBest" class="go-best"></div>
+    <div id="goMotes" class="go-motes"></div>
+    <div class="prompt">Tap to retry</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = function (id) { return document.getElementById(id); };
+  const cv = $("c"), ctx = cv.getContext("2d");
+  const hud = $("hud"), scoreEl = $("score"), zoneBar = $("zonebar");
+  const zoneEl = $("zone"), zBig = $("zBig"), zName = $("zName"), zStars = $("zStars"), zReward = $("zReward");
+  const startEl = $("start"), overEl = $("over"), goScore = $("goScore"), goBest = $("goBest"), goMotes = $("goMotes");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  const STATE = { START: 0, PLAY: 1, OVER: 2, DYING: 3 };
+  let state = STATE.START;
+  let shards = [], shake = 0, death = null, flash = 0;
+  const player = { x: 0, y: 0, r: 9, vy: 0, trail: [] };
+  let obstacles = [], motes = [], particles = [], dust = [];
+  let scroll = 0, zoneScroll = 0, nextWX = 0, speed = 0, gameTime = 0;
+  let score = 0, moteCount = 0, lastT = 0;
+  // zone state
+  let zone = 1, zoneCleared = 0, spawnedThisZone = 0, moteThisZone = 0;
+  let transition = null;
+  let best = +(localStorage.getItem("dotBest") || 0);
+  let moteTotal = +(localStorage.getItem("dotMotes") || 0);
+  const BASE_SPEED = 155, MAX_SPEED = 360;
+  // flap "bounce" ramps with progress: gentle early for easy control, stronger later
+  const FLAP_BASE = 0.58, FLAP_MAX = 0.84, FLAP_T0 = 5, FLAP_T1 = 30;
+
+  const ZONE_NAMES = ["Drift", "Weave", "Pulse"];
+  const ZONE_HINT  = ["Ease in", "Gaps split and offset", "Gaps drift \u2014 time it"];
+  const ROMAN = ["", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+  function zoneType(z) { return (z - 1) % 3; }
+  function zoneLoop(z) { return Math.floor((z - 1) / 3); }
+  function zoneName(z) { const b = ZONE_NAMES[zoneType(z)], l = zoneLoop(z); return l > 0 ? b + " " + (ROMAN[l] || ("x" + l)) : b; }
+  function zoneQuota(z) { return [8, 10, 12][zoneType(z)] + zoneLoop(z) * 2; }
+  function updateZoneBar() { zoneBar.textContent = "Zone " + zone + " \u00B7 " + zoneName(zone); }
+
+  function seedDust() {
+    dust = [];
+    const n = Math.round((W * H) / 14000);
+    for (let i = 0; i < n; i++)
+      dust.push({ x: Math.random()*W, y: Math.random()*H, r: Math.random()*1.4+0.4, s: Math.random()*0.5+0.25 });
+  }
+  seedDust();
+  window.addEventListener("resize", seedDust);
+
+  // ---- audio ----
+  let actx = null;
+  function initAudio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f0, f1, dur, vol) {
+    if (!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = "sine"; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.5);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(t + dur + 0.02);
+  }
+  const pingCollect = function () { tone(880, 1320, 0.18, 0.10); };
+  const pingZone    = function () { tone(660, 990, 0.5, 0.10); };
+  const pingThud    = function () { tone(200, 70, 0.32, 0.16); };
+
+  // ---- obstacle dot-grid shapes ----
+  const SHAPES = ["rect", "spike", "dome", "teeth", "steps"];
+  function allowedDepth(shape, u, ci, n) {
+    const a = Math.abs(u);
+    switch (shape) {
+      case "rect":  return 1;
+      case "spike": return 1 - a;
+      case "dome":  return Math.sqrt(Math.max(0, 1 - u*u));
+      case "teeth": return (ci % 2 === 0) ? 1 : 0.42;
+      case "steps": return 0.3 + 0.7 * (ci / Math.max(1, n - 1));
+      default:      return 1;
+    }
+  }
+  // pad extends the wall beyond the screen edge so moving gaps never reveal a hole
+  function fillBlocker(dots, ox, Wb, shape, edgeY, span, fromTop, pad) {
+    pad = pad || 0;
+    const S = 14, nCols = Math.max(2, Math.round(Wb / S));
+    const jit = () => (Math.random() - 0.5) * 3;
+    for (let ci = 0; ci <= nCols; ci++) {
+      const cx = (ci / nCols) * Wb, u = (cx - Wb/2) / (Wb/2);
+      const ad = allowedDepth(shape, u, ci, nCols + 1);
+      for (let cy = -pad; cy <= span; cy += S) {
+        if (cy >= 0 && cy / span > ad) continue;   // padding region always fills
+        const y = fromTop ? cy : (edgeY - cy);
+        dots.push({ dx: ox + cx + jit(), dy: y + jit(), r: 2.8 + Math.random()*0.9 });
+      }
+    }
+  }
+
+  function makeObstacle(z) {
+    const zt = zoneType(z), loop = zoneLoop(z);
+    let gap = Math.max(150 - loop * 12, 118);
+    let gates = 1, osc = null;
+
+    if (zt === 0) {                              // Drift: static single gaps
+      gates = 1;
+    } else if (zt === 1) {                       // Weave: bounce gates
+      gates = Math.random() < 0.78 ? 2 : 1;
+      if (loop >= 1 && gates === 2 && Math.random() < 0.4) gates = 3;
+      if (gates > 1) gap += 12;
+    } else {                                     // Pulse: moving gaps (+ some bounce)
+      if (Math.random() < 0.72) {
+        gates = 1;
+        osc = { amp: H * (0.07 + loop * 0.015), w: 1.0 + loop * 0.15, phase: Math.random() * Math.PI * 2 };
+        gap += 16;
+      } else { gates = 2; gap += 12; }
+    }
+
+    const offset = Math.min(H * 0.24, H * 0.13 + loop * 26);
+    const Wb = gates === 1 ? (osc ? 40 : 52 + Math.random()*18) : 34;
+    const gateSpacing = Wb + 46;
+    const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const amp = osc ? osc.amp : 0;
+    const pad = osc ? amp + 12 : 0;
+    const lo = gap/2 + 24 + amp, hi = H - gap/2 - 24 - amp;
+    const base = lo + Math.random() * Math.max(1, hi - lo);
+    const dots = [];
+    let firstCenter = base, lastCenter = base;
+
+    for (let i = 0; i < gates; i++) {
+      let c = (gates === 1) ? base : base + ((i % 2 === 0 ? -1 : 1) * dir) * (offset / 2);
+      c = Math.max(lo, Math.min(hi, c));
+      if (i === 0) firstCenter = c;
+      lastCenter = c;
+      const gTop = c - gap/2, gBot = c + gap/2, ox = i * gateSpacing;
+      fillBlocker(dots, ox, Wb, shape, gTop, gTop, true, pad);
+      fillBlocker(dots, ox, Wb, shape, H, H - gBot, false, pad);
+    }
+
+    if (gates === 1 && !osc && Math.random() < 0.4) {
+      const gTop = firstCenter - gap/2, gBot = firstCenter + gap/2;
+      const topSpace = gTop, botSpace = H - gBot, inTop = topSpace > botSpace;
+      const cy = inTop ? gTop*0.5 : gBot + botSpace*0.5;
+      const rad = Math.min(22, (inTop ? topSpace : botSpace) * 0.32);
+      if (rad > 10) {
+        if (Math.random() < 0.5)
+          for (let ang = 0; ang < Math.PI*2; ang += Math.PI/7)
+            dots.push({ dx: Wb/2 + Math.cos(ang)*rad, dy: cy + Math.sin(ang)*rad, r: 3 });
+        else
+          for (let s = -rad; s <= rad; s += 8) {
+            const w = rad - Math.abs(s);
+            dots.push({ dx: Wb/2 - w, dy: cy + s, r: 3 });
+            dots.push({ dx: Wb/2 + w, dy: cy + s, r: 3 });
+          }
+      }
+    }
+
+    const w = (gates - 1) * gateSpacing + Wb;
+    return { wx: 0, dots, w, scored: false, guideY: base, osc: osc };
+  }
+
+  function gravity() { return H * 2.2; }
+  function flapV() {
+    const t = Math.max(0, Math.min(1, (score - FLAP_T0) / (FLAP_T1 - FLAP_T0)));
+    return -H * (FLAP_BASE + (FLAP_MAX - FLAP_BASE) * t);
+  }
+  function maxFall() { return H * 1.15; }
+
+  function bumpHud() {
+    if (reduceMotion) return;
+    hud.style.transform = "scale(1.28)";
+    clearTimeout(hud._bt);
+    hud._bt = setTimeout(function () { hud.style.transform = "scale(1)"; }, 120);
+  }
+  function spawnBurst(x, y, big) {
+    const n = reduceMotion ? 4 : (big ? 20 : 11);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 45 + Math.random() * (big ? 150 : 95);
+      particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1 });
+    }
+  }
+
+  function reset() {
+    player.x = Math.round(W * 0.32);
+    player.y = H * 0.42; player.vy = flapV() * 0.5; player.trail = [];
+    obstacles = []; motes = []; particles = [];
+    scroll = 0; zoneScroll = 0; nextWX = W + 60; speed = BASE_SPEED; gameTime = 0;
+    shards = []; shake = 0; death = null; flash = 0;
+    score = 0; moteCount = 0;
+    zone = 1; zoneCleared = 0; spawnedThisZone = 0; moteThisZone = 0; transition = null;
+  }
+  function startGame() {
+    reset(); state = STATE.PLAY;
+    startEl.classList.add("hidden"); overEl.classList.add("hidden");
+    zoneEl.classList.remove("on");
+    hud.classList.add("on"); scoreEl.classList.add("on");
+    hud.textContent = "0"; scoreEl.textContent = "0";
+    updateZoneBar(); zoneBar.classList.add("on");
+  }
+  function gameOver() {
+    state = STATE.OVER;
+    best = Math.max(best, score); moteTotal += moteCount;
+    localStorage.setItem("dotBest", best); localStorage.setItem("dotMotes", moteTotal);
+    goScore.textContent = score;
+    goBest.textContent = "Best  " + best + "   \u00B7   Zone " + zone;
+    goMotes.textContent = "\u25CF " + moteCount + " gathered   \u00B7   " + moteTotal + " total";
+    hud.classList.remove("on"); scoreEl.classList.remove("on");
+    zoneBar.classList.remove("on"); zoneEl.classList.remove("on");
+    overEl.classList.remove("hidden");
+  }
+
+  // ---- shatter death ----
+  function spawnShatter(cx, cy, pvy) {
+    shards = [];
+    const n = reduceMotion ? 12 : 26;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 260;
+      shards.push({
+        x: cx + (Math.random()*2-1) * player.r,
+        y: cy + (Math.random()*2-1) * player.r,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp + pvy * 0.3,
+        r: 1.6 + Math.random() * 2.6, life: 1
+      });
+    }
+  }
+  function updateShards(dt) {
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const s = shards[i];
+      s.vy += gravity() * 0.45 * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      s.vx *= 0.985; s.life -= dt * 1.3;
+      if (s.life <= 0) shards.splice(i, 1);
+    }
+    if (shake > 0) { shake *= Math.pow(0.0015, dt); if (shake < 0.4) shake = 0; }
+  }
+  function beginDeath() {
+    state = STATE.DYING;
+    death = { t: 0, shown: false };
+    shake = 10; flash = 1;
+    spawnShatter(player.x, player.y, player.vy);
+    pingThud();
+    if (navigator.vibrate) navigator.vibrate([14, 22, 14]);
+  }
+  function updateDeath(dt) {
+    death.t += dt;
+    flash = Math.max(0, flash - dt * 14);
+    if (death.t > 0.09) updateShards(dt);            // hit-stop freeze, then scatter
+    if (death.t > 0.7 && !death.shown) { death.shown = true; gameOver(); }
+  }
+
+  // ---- zone transition ----
+  function startTransition() {
+    transition = { phase: "clear", t: 0 };
+    obstacles = []; motes = [];
+    zoneBar.classList.remove("on");
+  }
+  function showZoneCleared() {
+    const q = zoneQuota(zone);
+    let stars = 1; if (moteThisZone >= q * 0.3) stars = 2; if (moteThisZone >= q * 0.6) stars = 3;
+    const bonus = 3 + zone;
+    moteCount += bonus; hud.textContent = moteCount; bumpHud();
+    zBig.textContent = "Zone " + zone;
+    zName.textContent = zoneName(zone) + " cleared";
+    zStars.textContent = "\u2605".repeat(stars) + "\u2606".repeat(3 - stars);
+    zReward.textContent = "+" + bonus + " \u25CF   \u00B7   " + moteThisZone + " gathered this zone";
+    zoneEl.classList.add("on");
+    pingZone();
+  }
+  function showZoneNext() {
+    const nz = zone + 1;
+    zBig.textContent = "Zone " + nz;
+    zName.textContent = zoneName(nz);
+    zStars.textContent = "";
+    zReward.textContent = ZONE_HINT[zoneType(nz)];
+  }
+  function endTransition() {
+    zoneEl.classList.remove("on");
+    zone++; zoneCleared = 0; spawnedThisZone = 0; moteThisZone = 0; zoneScroll = 0;
+    nextWX = scroll + W + 120;
+    speed = Math.min(BASE_SPEED + (zone - 1) * 12, 250);
+    transition = null;
+    updateZoneBar(); zoneBar.classList.add("on");
+  }
+  function updateTransition(dt) {
+    transition.t += dt;
+    speed += (55 - speed) * Math.min(1, dt * 2);   // ease to gentle drift
+    scroll += speed * dt;
+    player.vy += gravity() * dt;
+    if (player.vy > maxFall()) player.vy = maxFall();
+    player.y += player.vy * dt;
+    player.y = Math.max(player.r, Math.min(H - player.r, player.y)); // non-lethal breather
+    player.trail.unshift({ x: player.x, y: player.y });
+    if (player.trail.length > 14) player.trail.pop();
+    for (const p of dust) { p.x -= speed*dt*p.s*0.4; if (p.x < -2) { p.x = W + 2; p.y = Math.random()*H; } }
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]; p.life -= dt * 2.2;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.x += p.vx*dt - speed*dt; p.y += p.vy*dt; p.vx *= 0.92; p.vy *= 0.92;
+    }
+    const ph = transition.phase;
+    if (ph === "clear" && transition.t > 0.5) { showZoneCleared(); transition.phase = "flourish"; transition.t = 0; }
+    else if (ph === "flourish" && transition.t > 2.0) { showZoneNext(); transition.phase = "next"; transition.t = 0; }
+    else if (ph === "next" && transition.t > 1.5) { endTransition(); }
+  }
+
+  function onDown(e) {
+    e.preventDefault(); initAudio();
+    if (state === STATE.PLAY) player.vy = flapV();
+    else startGame();
+  }
+  cv.addEventListener("touchstart", onDown, { passive: false });
+  cv.addEventListener("mousedown", onDown);
+  overEl.addEventListener("touchstart", onDown, { passive: false });
+  overEl.addEventListener("mousedown", onDown);
+  startEl.addEventListener("touchstart", onDown, { passive: false });
+  startEl.addEventListener("mousedown", onDown);
+  window.addEventListener("keydown", function (e) { if (e.code === "Space") { e.preventDefault(); onDown(e); } });
+
+  function update(dt) {
+    if (transition) { updateTransition(dt); return; }
+
+    gameTime += dt;
+    const zoneBase = Math.min(BASE_SPEED + (zone - 1) * 12, 250);
+    speed = Math.min(MAX_SPEED, zoneBase + zoneScroll * 0.010);
+    const move = speed * dt;
+    scroll += move; zoneScroll += move;
+
+    player.vy += gravity() * dt;
+    if (player.vy > maxFall()) player.vy = maxFall();
+    player.y += player.vy * dt;
+    if (player.y < player.r) { player.y = player.r; player.vy = 0; }
+    if (player.y + player.r >= H) { player.y = H - player.r; beginDeath(); return; }
+
+    player.trail.unshift({ x: player.x, y: player.y });
+    if (player.trail.length > 14) player.trail.pop();
+
+    // spawn this zone's obstacles (+ a mote in the breathing space)
+    while (spawnedThisZone < zoneQuota(zone) && nextWX - scroll < W + 120) {
+      const o = makeObstacle(zone);
+      o.wx = nextWX; obstacles.push(o); spawnedThisZone++;
+      const between = Math.max(150, 300 - zoneScroll * 0.02);
+      if (Math.random() < 0.72) {
+        let my = o.guideY;
+        if (zone >= 2 && Math.random() < 0.35) my += (Math.random() < 0.5 ? -1 : 1) * Math.min(90, 40 + zone * 6);
+        my = Math.max(44, Math.min(H - 44, my));
+        motes.push({ wx: nextWX + o.w + between * 0.5, y: my, r: 20, t: Math.random() * 6 });
+      }
+      nextWX += o.w + between;
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i], sx = o.wx - scroll;
+      const yo = o.osc ? o.osc.amp * Math.sin(gameTime * o.osc.w + o.osc.phase) : 0;
+      if (!o.scored && sx + o.w < player.x) {
+        o.scored = true; score++; zoneCleared++; scoreEl.textContent = score;
+        if (zoneCleared >= zoneQuota(zone)) { startTransition(); return; }
+      }
+      if (sx < player.x + 40 && sx + o.w > player.x - 40) {
+        for (let k = 0; k < o.dots.length; k++) {
+          const d = o.dots[k];
+          const ddx = (sx + d.dx) - player.x, ddy = (d.dy + yo) - player.y;
+          const rr = player.r + d.r + 1;
+          if (ddx*ddx + ddy*ddy < rr*rr) { beginDeath(); return; }
+        }
+      }
+      if (sx + o.w < -20) obstacles.splice(i, 1);
+    }
+
+    for (let i = motes.length - 1; i >= 0; i--) {
+      const m = motes[i]; m.t += dt;
+      const sx = m.wx - scroll;
+      if (sx < -30) { motes.splice(i, 1); continue; }
+      const dx = sx - player.x, dy = m.y - player.y, rr = m.r + player.r;
+      if (dx*dx + dy*dy < rr*rr) {
+        moteCount++; moteThisZone++; hud.textContent = moteCount; bumpHud();
+        spawnBurst(sx, m.y, false); pingCollect();
+        if (navigator.vibrate) navigator.vibrate(8);
+        motes.splice(i, 1);
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]; p.life -= dt * 2.2;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.x += p.vx*dt - move; p.y += p.vy*dt; p.vx *= 0.92; p.vy *= 0.92;
+    }
+    for (const p of dust) { p.x -= move * p.s * 0.4; if (p.x < -2) { p.x = W + 2; p.y = Math.random()*H; } }
+  }
+
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake);
+    const g = ctx.createRadialGradient(W*0.5, H*0.5, 0, W*0.5, H*0.5, Math.max(W,H)*0.75);
+    g.addColorStop(0, "#2b2b2b"); g.addColorStop(1, "#161616");
+    ctx.fillStyle = g; ctx.fillRect(-24, -24, W+48, H+48);
+
+    ctx.fillStyle = "#3a3a3a";
+    for (const p of dust) { ctx.globalAlpha = 0.5 + p.s*0.4; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+
+    for (const o of obstacles) {
+      const sx = o.wx - scroll;
+      const yo = o.osc ? o.osc.amp * Math.sin(gameTime * o.osc.w + o.osc.phase) : 0;
+      for (const d of o.dots) {
+        const x = sx + d.dx, y = d.dy + yo;
+        if (x < -8 || x > W + 8) continue;
+        ctx.fillStyle = Math.abs(x - player.x) < 60 ? "#c99b9b" : "#8c8c8c";
+        ctx.beginPath(); ctx.arc(x, y, d.r, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
+    for (const m of motes) {
+      const sx = m.wx - scroll;
+      if (sx < -30 || sx > W + 30) continue;
+      const gm = ctx.createRadialGradient(sx, m.y, 0, sx, m.y, m.r + 6);
+      gm.addColorStop(0, "rgba(150,240,240,0.30)"); gm.addColorStop(1, "rgba(150,240,240,0)");
+      ctx.fillStyle = gm; ctx.beginPath(); ctx.arc(sx, m.y, m.r + 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#d7fbfb";
+      const rot = reduceMotion ? 0 : m.t * 1.5;
+      for (let k = 0; k < 7; k++) {
+        const a = rot + k / 7 * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(sx + Math.cos(a)*(m.r-4), m.y + Math.sin(a)*(m.r-4), 2.6, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(sx, m.y, 2.2, 0, Math.PI*2); ctx.fill();
+    }
+
+    if (state === STATE.PLAY) {
+      for (let i = player.trail.length - 1; i >= 0; i--) {
+        const tr = player.trail[i];
+        ctx.globalAlpha = (1 - i / player.trail.length) * 0.28;
+        ctx.fillStyle = "#7fe4e4";
+        ctx.beginPath(); ctx.arc(tr.x, tr.y, player.r * (1 - i / player.trail.length * 0.5), 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      const pulse = reduceMotion ? 1 : 1 + Math.sin(t/260)*0.12;
+      const gg = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, 34*pulse);
+      gg.addColorStop(0, "rgba(127,228,228,0.55)"); gg.addColorStop(1, "rgba(127,228,228,0)");
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(player.x, player.y, 34*pulse, 0, Math.PI*2); ctx.fill();
+      const sy = Math.max(0.75, Math.min(1.4, 1 + player.vy / 2600)), sx2 = 1 / Math.sqrt(sy);
+      ctx.save(); ctx.translate(player.x, player.y); ctx.scale(sx2, sy);
+      ctx.fillStyle = "#eef7f7"; ctx.beginPath(); ctx.arc(0, 0, player.r, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    for (const s of shards) {
+      ctx.globalAlpha = Math.max(0, s.life);
+      ctx.fillStyle = "#eef7f7";
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life) * 0.9;
+      ctx.fillStyle = "#bff6f6";
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if (flash > 0) {
+      ctx.fillStyle = "rgba(230,255,255," + (flash * 0.5) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function frame(t) {
+    if (!lastT) lastT = t;
+    let dt = (t - lastT) / 1000; lastT = t;
+    if (dt > 0.05) dt = 0.05;
+    if (state === STATE.PLAY) update(dt);
+    else if (state === STATE.DYING) updateDeath(dt);
+    else if (state === STATE.OVER) updateShards(dt);
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
