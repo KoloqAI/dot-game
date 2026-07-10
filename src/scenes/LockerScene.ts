@@ -10,12 +10,14 @@ export class LockerScene extends Phaser.Scene {
   private config!: GameConfig;
   private cosmetics!: Cosmetics;
   private moteManager!: MoteManager;
+  private sceneData!: { config: GameConfig };
 
   constructor() {
     super({ key: 'LockerScene' });
   }
 
   async create(data: { config: GameConfig }) {
+    this.sceneData = data;
     this.config = data.config;
     const { width, height } = this.cameras.main;
 
@@ -80,6 +82,15 @@ export class LockerScene extends Phaser.Scene {
       .on('pointerdown', () => {
         this.scene.start('StartScene', { config: this.config });
       });
+
+    this.scale.on('resize', this.onResize, this);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.onResize, this);
+    });
+  }
+
+  private onResize(): void {
+    this.scene.restart(this.sceneData);
   }
 
   private renderSkins(width: number, startY: number): void {

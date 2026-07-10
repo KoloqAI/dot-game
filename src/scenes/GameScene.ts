@@ -27,6 +27,7 @@ export class GameScene extends Phaser.Scene {
   private cosmetics!: Cosmetics;
 
   // Game state
+  private ready: boolean = false;
   private speed: number = 0;
   private zoneScroll: number = 0;
   private bestScore: number = 0;
@@ -42,6 +43,7 @@ export class GameScene extends Phaser.Scene {
   // Transition state
   private transitionState: 'none' | 'clearing' | 'flourish' | 'nextCard' | 'resuming' = 'none';
   private transitionTimer: number = 0;
+  private viewH: number = 0;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -49,6 +51,16 @@ export class GameScene extends Phaser.Scene {
 
   async create(data: { config: GameConfig }) {
     this.config = data.config;
+    this.ready = false;
+
+    // Reset run state — Phaser reuses the scene instance across restarts,
+    // so class-field initializers do not re-run on retry.
+    this.isDead = false;
+    this.hitStopTimer = 0;
+    this.zoneScroll = 0;
+    this.speed = 0;
+    this.transitionState = 'none';
+    this.transitionTimer = 0;
 
     // Load cosmetics and apply
     this.cosmetics = new Cosmetics();
@@ -83,11 +95,22 @@ export class GameScene extends Phaser.Scene {
     this.speed = this.zoneManager.getBaseSpeed();
 
     // Create HUD
+    this.viewH = this.cameras.main.height;
     this.createHUD();
+    this.layoutHUD();
 
     // Input
     this.input.on('pointerdown', () => this.handleInput());
     this.input.keyboard?.on('keydown-SPACE', () => this.handleInput());
+
+    // Relayout on orientation / viewport change
+    this.scale.on('resize', this.onResize, this);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.onResize, this);
+    });
+
+    // All systems initialized — safe to run the update loop
+    this.ready = true;
   }
 
   private async loadBestScore(): Promise<void> {
@@ -115,12 +138,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createHUD(): void {
-    const W = this.cameras.main.width;
-    const H = this.cameras.main.height;
-
     // Score (top-left)
     this.scoreText = this.add
-      .text(20, 40, '0', {
+      .text(0, 0, '0', {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '32px',
         color: this.config.colors.uiText,
@@ -130,7 +150,7 @@ export class GameScene extends Phaser.Scene {
 
     // Motes (top-right)
     this.motesText = this.add
-      .text(W - 20, 40, '0', {
+      .text(0, 0, '0', {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '24px',
         color: this.config.colors.accent,
@@ -140,7 +160,7 @@ export class GameScene extends Phaser.Scene {
 
     // Zone label (top-center)
     this.zoneText = this.add
-      .text(W / 2, 40, 'Zone 1 · Drift', {
+      .text(0, 0, 'Zone 1 · Drift', {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '16px',
         color: this.config.colors.dust,
@@ -150,7 +170,7 @@ export class GameScene extends Phaser.Scene {
 
     // Mute button (bottom-right)
     this.muteButton = this.add
-      .text(W - 20, H - 40, this.audio.muted ? '🔇' : '🔊', {
+      .text(0, 0, this.audio.muted ? '🔇' : '🔊', {
         fontSize: '24px',
       })
       .setOrigin(1, 1)
@@ -160,6 +180,32 @@ export class GameScene extends Phaser.Scene {
         this.audio.toggleMute();
         this.muteButton.setText(this.audio.muted ? '🔇' : '🔊');
       });
+  }
+
+  private layoutHUD(): void {
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
+
+    this.scoreText.setPosition(20, 40);
+    this.motesText.setPosition(W - 20, 40);
+    this.zoneText.setPosition(W / 2, 40);
+    this.muteButton.setPosition(W - 20, H - 40);
+  }
+
+  private onResize(size: Phaser.Structs.Size): void {
+    if (!this.ready) return;
+
+    const newH = size.height;
+    const oldH = this.viewH;
+    const ratio = oldH > 0 ? newH / oldH : 1;
+
+    this.player.resize(newH, oldH);
+    this.background.resize();
+    this.obstacleManager.resize(newH);
+    this.moteManager.resize(ratio);
+    this.layoutHUD();
+
+    this.viewH = newH;
   }
 
   private handleInput(): void {
@@ -172,6 +218,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    // Systems are initialized asynchronously in create(); skip frames until ready
+    if (!this.ready) return;
+
     // Clamp delta to 50ms (handles backgrounding)
     const dt = Math.min(delta / 1000, 0.05);
 
@@ -247,12 +296,18 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Update motes
-    this.moteManager.update(
+    const collectedMotes = this.moteManager.update(
       this.obstacleManager.scroll,
       this.player.x,
       this.player.y,
       this.player.collisionRadius
     );
+
+    for (const pos of collectedMotes) {
+      this.fx.burst(pos.x, pos.y);
+      this.audio.playCollect();
+      Haptics.light();
+    }
 
     // Check if zone complete
     if (this.zoneManager.isZoneComplete() && this.transitionState === 'none') {

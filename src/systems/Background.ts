@@ -69,6 +69,14 @@ export class Background {
     }
   }
 
+  /**
+   * Re-seed dust for new viewport dimensions.
+   */
+  resize(): void {
+    this.dustParticles = [];
+    this.initDust();
+  }
+
   destroy(): void {
     this.graphics.destroy();
   }

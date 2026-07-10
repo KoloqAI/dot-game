@@ -6,12 +6,14 @@ import type { GameConfig } from '../config';
  */
 export class StartScene extends Phaser.Scene {
   private config!: GameConfig;
+  private sceneData!: { config: GameConfig };
 
   constructor() {
     super({ key: 'StartScene' });
   }
 
   create(data: { config: GameConfig }) {
+    this.sceneData = data;
     this.config = data.config;
     const { width, height } = this.cameras.main;
 
@@ -58,5 +60,14 @@ export class StartScene extends Phaser.Scene {
     this.input.once('pointerdown', () => {
       this.scene.start('GameScene', { config: this.config });
     });
+
+    this.scale.on('resize', this.onResize, this);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.onResize, this);
+    });
+  }
+
+  private onResize(): void {
+    this.scene.restart(this.sceneData);
   }
 }

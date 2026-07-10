@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { GameConfig } from '../config';
-import type { Shard } from '../types';
+import type { Shard, BurstParticle } from '../types';
 
 /**
  * Fx — sparkles, shatter shards, screen shake, flash
@@ -11,6 +11,7 @@ export class Fx {
 
   private graphics: Phaser.GameObjects.Graphics;
   private shards: Shard[] = [];
+  private bursts: BurstParticle[] = [];
   private shakeOffset = { x: 0, y: 0 };
   private shakeIntensity: number = 0;
   private flashAlpha: number = 0;
@@ -64,25 +65,31 @@ export class Fx {
   }
 
   /**
-   * Sparkle effect at position (for mote collection)
+   * Burst effect at position (mote collection — matches prototype spawnBurst)
    */
-  sparkle(x: number, y: number): void {
-    // Simple sparkle: small particles
-    const sparkleCount = 8;
+  burst(x: number, y: number): void {
+    const count = this.reducedMotion ? 4 : 11;
 
-    for (let i = 0; i < sparkleCount; i++) {
-      const angle = (i / sparkleCount) * Math.PI * 2;
-      const speed = 80 + Math.random() * 40;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 45 + Math.random() * 95;
 
-      this.shards.push({
+      this.bursts.push({
         x,
         y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
+        life: 1,
         radius: 2 + Math.random() * 2,
-        alpha: 1,
       });
     }
+  }
+
+  /**
+   * Sparkle effect at position (legacy alias — delegates to burst)
+   */
+  sparkle(x: number, y: number): void {
+    this.burst(x, y);
   }
 
   /**
@@ -90,6 +97,20 @@ export class Fx {
    */
   update(dt: number): void {
     const H = this.scene.cameras.main.height;
+
+    // Update burst particles (no gravity — outward pop + fade)
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const p = this.bursts[i];
+      p.life -= dt * 2.2;
+      if (p.life <= 0) {
+        this.bursts.splice(i, 1);
+        continue;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+    }
 
     // Update shards
     for (let i = this.shards.length - 1; i >= 0; i--) {
@@ -137,6 +158,13 @@ export class Fx {
   render(): void {
     this.graphics.clear();
 
+    // Render burst particles (mote collect)
+    const burstColor = parseInt(this.config.colors.mote.replace('#', '0x'));
+    for (const p of this.bursts) {
+      this.graphics.fillStyle(burstColor, p.life);
+      this.graphics.fillCircle(p.x, p.y, p.radius);
+    }
+
     // Render shards
     const shardColor = parseInt(this.config.colors.shards.replace('#', '0x'));
 
@@ -164,6 +192,7 @@ export class Fx {
    */
   clear(): void {
     this.shards = [];
+    this.bursts = [];
     this.shakeIntensity = 0;
     this.shakeOffset = { x: 0, y: 0 };
     this.flashAlpha = 0;

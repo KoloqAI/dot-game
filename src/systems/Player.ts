@@ -146,6 +146,21 @@ export class Player {
   }
 
   /**
+   * Adapt player to new viewport height after orientation change.
+   */
+  resize(newH: number, oldH: number): void {
+    const ratio = oldH > 0 ? newH / oldH : 1;
+
+    this.x = this.config.physics.playerX;
+    this.y *= ratio;
+    this.radius = this.config.physics.playerRadius;
+    this.collisionRadius = this.radius * this.config.physics.collisionScale;
+
+    // Clamp within vertical bounds
+    this.y = Math.max(this.radius, Math.min(newH - this.radius, this.y));
+  }
+
+  /**
    * Check if player hit floor
    */
   hitFloor(): boolean {

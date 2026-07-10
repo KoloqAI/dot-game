@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { createConfig } from './config';
+import { createConfig, rescaleConfig } from './config';
 import { BootScene } from './scenes/BootScene';
 import { StartScene } from './scenes/StartScene';
 import { GameScene } from './scenes/GameScene';
@@ -26,7 +26,7 @@ const gameConfig: Phaser.Types.Core.GameConfig = {
   height: H,
   backgroundColor: config.colors.bgVignetteCenter,
   scale: {
-    mode: Phaser.Scale.NONE,
+    mode: Phaser.Scale.RESIZE,
     width: W,
     height: H,
   },
@@ -55,11 +55,9 @@ game.scene.start('BootScene');
 // Store config globally for scenes to access
 (window as any).__GAME_CONFIG__ = config;
 
-// Handle window resize (basic — for portrait lock this is mostly for dev)
-window.addEventListener('resize', () => {
-  const newW = window.innerWidth;
-  const newH = window.innerHeight;
-  game.scale.resize(newW, newH);
+// Rescale shared config on every viewport resize (scenes read the same object)
+game.scale.on('resize', (size: Phaser.Structs.Size) => {
+  rescaleConfig(config, size.width, size.height);
 });
 
 // Pause on blur, resume on focus

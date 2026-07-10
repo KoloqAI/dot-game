@@ -15,6 +15,10 @@ export class ObstacleFactory {
     this.screenHeight = screenHeight;
   }
 
+  setScreenHeight(screenHeight: number): void {
+    this.screenHeight = screenHeight;
+  }
+
   /**
    * Create a static single-gap obstacle
    */

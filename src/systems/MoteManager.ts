@@ -97,22 +97,23 @@ export class MoteManager {
   }
 
   /**
-   * Update motes, check collection
+   * Update motes, check collection.
+   * Returns screen positions of motes collected this frame (for burst FX).
    */
-  update(scroll: number, playerX: number, playerY: number, playerRadius: number): void {
+  update(
+    scroll: number,
+    playerX: number,
+    playerY: number,
+    playerRadius: number
+  ): Array<{ x: number; y: number }> {
     const collectRadius = this.config.motes.collectRadius + playerRadius;
+    const collected: Array<{ x: number; y: number }> = [];
 
     // Remove off-screen motes
     this.motes = this.motes.filter((mote) => {
       const screenX = mote.worldX - scroll;
       if (screenX < -50) {
-        // Recycle graphics
-        if (mote.graphics) {
-          mote.graphics.clear();
-          this.graphicsPool.push(mote.graphics);
-          mote.graphics = undefined;
-        }
-        // Miss resets combo
+        this.recycleGraphics(mote);
         if (!mote.collected) {
           this.combo = 0;
         }
@@ -121,8 +122,8 @@ export class MoteManager {
       return true;
     });
 
-    // Check collection
-    for (const mote of this.motes) {
+    // Check collection (iterate copy — collect() removes from array)
+    for (const mote of [...this.motes]) {
       if (mote.collected) continue;
 
       const screenX = mote.worldX - scroll;
@@ -131,18 +132,33 @@ export class MoteManager {
       const distSq = dx * dx + dy * dy;
 
       if (distSq < collectRadius * collectRadius) {
+        collected.push({ x: screenX, y: mote.y });
         this.collect(mote);
       }
+    }
+
+    return collected;
+  }
+
+  private recycleGraphics(mote: Mote): void {
+    if (mote.graphics) {
+      mote.graphics.clear();
+      this.graphicsPool.push(mote.graphics);
+      mote.graphics = undefined;
     }
   }
 
   private collect(mote: Mote): void {
+    this.recycleGraphics(mote);
     mote.collected = true;
     this.runMotes++;
     this.lifetimeMotes++;
     this.combo++;
 
-    // TODO: Trigger sparkle, chime, haptic (in GameScene)
+    const idx = this.motes.indexOf(mote);
+    if (idx >= 0) {
+      this.motes.splice(idx, 1);
+    }
   }
 
   /**
@@ -170,8 +186,6 @@ export class MoteManager {
     const glowColor = parseInt(this.config.colors.accent.replace('#', '0x'));
 
     for (const mote of this.motes) {
-      if (mote.collected) continue;
-
       const screenX = mote.worldX - scroll;
 
       // Get or create graphics
@@ -194,15 +208,20 @@ export class MoteManager {
   }
 
   /**
+   * Scale mote Y positions on orientation change.
+   */
+  resize(ratio: number): void {
+    for (const mote of this.motes) {
+      mote.y *= ratio;
+    }
+  }
+
+  /**
    * Clear all motes
    */
   clear(): void {
     for (const mote of this.motes) {
-      if (mote.graphics) {
-        mote.graphics.clear();
-        this.graphicsPool.push(mote.graphics);
-        mote.graphics = undefined;
-      }
+      this.recycleGraphics(mote);
     }
     this.motes = [];
   }

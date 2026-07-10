@@ -187,3 +187,20 @@ export function createConfig(W: number, H: number): GameConfig {
     },
   };
 }
+
+/**
+ * Rescale W/H-dependent fields in place (shared config reference).
+ * Called on every viewport resize so physics and obstacles stay proportional.
+ */
+export function rescaleConfig(config: GameConfig, W: number, H: number): void {
+  config.physics.gravity = 2.2 * H;
+  config.physics.flapBase = 0.58 * H;
+  config.physics.flapMax = 0.84 * H;
+  config.physics.maxFall = 1.15 * H;
+  config.physics.playerX = 0.32 * W;
+  config.physics.playerRadius = 9 * (H / 800);
+
+  config.obstacles.bounceOffset = (loop: number) =>
+    Math.min(0.24 * H, 0.13 * H + loop * 26);
+  config.obstacles.movingAmplitude = (loop: number) => (0.07 + loop * 0.015) * H;
+}

@@ -228,6 +228,17 @@ export class ObstacleManager {
     this.nextWorldX = this.scroll + 800;
   }
 
+  /**
+   * Clear obstacles and reset spawn runway for new viewport height.
+   */
+  resize(newH: number): void {
+    this.factory.setScreenHeight(newH);
+    this.clear();
+
+    const W = this.scene.cameras.main.width;
+    this.nextWorldX = this.scroll + W + 120;
+  }
+
   destroy(): void {
     this.clear();
     for (const graphics of this.graphicsPool) {

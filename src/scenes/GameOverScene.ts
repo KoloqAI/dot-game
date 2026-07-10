@@ -12,6 +12,14 @@ export class GameOverScene extends Phaser.Scene {
   private lifetimeMotes: number = 0;
   private zone: number = 1;
   private isNewBest: boolean = false;
+  private sceneData!: {
+    config: GameConfig;
+    score: number;
+    bestScore: number;
+    motes: number;
+    lifetimeMotes: number;
+    zone: number;
+  };
 
   constructor() {
     super({ key: 'GameOverScene' });
@@ -25,6 +33,7 @@ export class GameOverScene extends Phaser.Scene {
     lifetimeMotes: number;
     zone: number;
   }) {
+    this.sceneData = data;
     this.config = data.config;
     this.score = data.score || 0;
     this.bestScore = data.bestScore || 0;
@@ -165,5 +174,14 @@ export class GameOverScene extends Phaser.Scene {
 
       this.scene.start('GameScene', { config: this.config });
     });
+
+    this.scale.on('resize', this.onResize, this);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.onResize, this);
+    });
+  }
+
+  private onResize(): void {
+    this.scene.restart(this.sceneData);
   }
 }

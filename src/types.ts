@@ -38,6 +38,15 @@ export interface Shard {
   graphics?: Phaser.GameObjects.Graphics;
 }
 
+export interface BurstParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  radius: number;
+}
+
 export type ZoneType = 'Drift' | 'Weave' | 'Pulse';
 
 export interface ZoneState {
